@@ -16,22 +16,23 @@ import "net/http"
 
 var (
 	arIndex = regexp.MustCompile(`\[\d\]`)
+	version string
 )
 
 // AuthRegistration describes a provider to authenticate against.
 type AuthRegistration struct {
-	Network        string `json:"network"`
-	ClientID       string `json:"clientid"`
-	ClientSecret   string `json:"clientsecret"`
-	Scopes         string `json:"scopes"`
-	AuthURL        string `json:"authurl"`
-	AccessTokenURL string `json:"accesstokenurl"`
-	UserinfoURL    string `json:"userinfo_url"`
-	PathEMail      string `json:"pathemail"`
-	PathID         string `json:"pathid"`
-	PathName       string `json:"pathname"`
-	PathPicture    string `json:"pathpicture"`
-	PathCover      string `json:"pathcover"`
+	Network        string   `json:"network"`
+	ClientID       string   `json:"clientid"`
+	ClientSecret   string   `json:"clientsecret"`
+	Scopes         []string `json:"scopes"`
+	AuthURL        string   `json:"authurl"`
+	AccessTokenURL string   `json:"accesstokenurl"`
+	UserinfoURL    string   `json:"userinfo_url"`
+	PathEMail      string   `json:"pathemail"`
+	PathID         string   `json:"pathid"`
+	PathName       string   `json:"pathname"`
+	PathPicture    string   `json:"pathpicture"`
+	PathCover      string   `json:"pathcover"`
 }
 
 // An Unparsed value is a raw map with the unparsed json contents.
@@ -55,17 +56,21 @@ type Token map[string]string
 // An Authkit stores a map of providers which are identified by a networkname.
 type Authkit struct {
 	providers map[string]AuthRegistration
+	url       string
 }
 
-// New returns a new Authkit with the given providers. If a provider is non
-// in then list of known defaults, it will be an empty registration.
-func New(providers ...string) *Authkit {
+// An AuthHandler is a callback function with the current authenticated
+// user as the first parameter.
+type AuthHandler func(u AuthUser, w http.ResponseWriter, rq *http.Request)
+
+// New returns a new Authkit with the given url as a prefix
+func New(url string) *Authkit {
 	a := &Authkit{}
 	a.providers = make(map[string]AuthRegistration)
-	for _, p := range providers {
-		r := GetRegistry(p)
-		a.providers[p] = r
+	if !strings.HasSuffix(url, "/") {
+		url = url + "/"
 	}
+	a.url = url
 	return a
 }
 
@@ -76,15 +81,76 @@ func (kit *Authkit) Add(r AuthRegistration) {
 	kit.providers[r.Network] = r
 }
 
+// Handle turns a AuthHandler to a normal HandlerFunc
+func (kit *Authkit) Handle(h AuthHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, rq *http.Request) {
+		h(AuthUser{}, w, rq)
+	}
+}
+
+// RegisterDefault registers the kit to the default http mux.
+func (kit *Authkit) RegisterDefault() {
+	kit.Register(http.DefaultServeMux)
+}
+
+// Register the kit to the given mux.
+func (kit *Authkit) Register(mux *http.ServeMux) {
+	mux.Handle(kit.url, kit)
+}
+
 func (kit *Authkit) ServeHTTP(w http.ResponseWriter, rq *http.Request) {
+	pt := rq.URL.Path
+	if pt == kit.url+"js" {
+		kit.js(w, rq)
+	} else if pt == kit.url+"redirect" {
+		kit.redirect(w, rq)
+	} else if pt == kit.url+"auth" {
+		kit.auth(w, rq)
+	} else {
+	}
+}
+
+func (kit *Authkit) js(w http.ResponseWriter, rq *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript")
+	loginTemplate.Execute(w, struct {
+		Providers map[string]AuthRegistration
+		Version   string
+		Base      string
+	}{
+		Providers: kit.providers,
+		Version:   version,
+		Base:      kit.url,
+	})
+}
+
+func (kit *Authkit) redirect(w http.ResponseWriter, rq *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	redirectTemplate.Execute(w, struct {
+		Providers map[string]AuthRegistration
+		Version   string
+		Base      string
+	}{
+		Providers: kit.providers,
+		Version:   version,
+		Base:      kit.url,
+	})
+}
+
+func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
 	if err := rq.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	accesscode := rq.FormValue("accesscode")
-	network := rq.FormValue("network")
-	redirect := rq.FormValue("redirect")
+	accesscode := rq.FormValue("code")
+	state := rq.FormValue("state")
+	res := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(state), &res); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	network := res["network"].(string)
+	redirect := res["redirect_uri"].(string)
 	reg, hasNetwork := kit.providers[network]
 	if !hasNetwork {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -92,6 +158,7 @@ func (kit *Authkit) ServeHTTP(w http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
+	fmt.Printf("%v, %s, %s\n", reg, accesscode, redirect)
 	usr, tok, err := auth(reg, accesscode, redirect)
 	fmt.Printf("%v, %v, %s\n", usr, tok, err)
 }
@@ -100,14 +167,16 @@ func auth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Toke
 	conf := &oauth2.Config{
 		ClientID:     reg.ClientID,
 		ClientSecret: reg.ClientSecret,
-		Scopes:       strings.Split(reg.Scopes, ","),
+		Scopes:       reg.Scopes,
 		RedirectURL:  redirectURL,
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  reg.AuthURL,
 			TokenURL: reg.AccessTokenURL,
 		},
 	}
+
 	tok, err := conf.Exchange(oauth2.NoContext, accesscode)
+	fmt.Printf("%#v returned: %#v, %s\n", *conf, tok, err)
 	if err != nil {
 		return nil, nil, err
 	}

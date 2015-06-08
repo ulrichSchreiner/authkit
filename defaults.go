@@ -10,7 +10,8 @@ const (
 var (
 	defaultBackends = map[string]AuthRegistration{
 		GoogleNetwork: AuthRegistration{
-			Scopes:         "openid,profile,email,https://www.googleapis.com/auth/plus.me",
+			Network:        GoogleNetwork,
+			Scopes:         []string{"openid", "profile", "email", "https://www.googleapis.com/auth/plus.me"},
 			AuthURL:        "https://accounts.google.com/o/oauth2/auth",
 			AccessTokenURL: "https://accounts.google.com/o/oauth2/token",
 			UserinfoURL:    "https://www.googleapis.com/plus/v1/people/me",
@@ -21,7 +22,8 @@ var (
 			PathCover:      "cover.coverPhoto.url",
 		},
 		GithubNetwork: AuthRegistration{
-			Scopes:         "user:email",
+			Network:        GithubNetwork,
+			Scopes:         []string{"user:email"},
 			AuthURL:        "https://github.com/login/oauth/authorize",
 			AccessTokenURL: "https://github.com/login/oauth/access_token",
 			UserinfoURL:    "https://api.github.com/user",
@@ -43,11 +45,13 @@ func GetRegistry(backend string) AuthRegistration {
 
 // Provider returns a new registration provider with the given clientid
 // and clientsecret.
-func Provider(backend, clientid, clientsecret, scopes string) AuthRegistration {
+func Provider(backend, clientid, clientsecret string, scopes ...string) AuthRegistration {
 	b := GetRegistry(backend)
 	b.ClientID = clientid
 	b.ClientSecret = clientsecret
-	b.Scopes = scopes
+	if scopes != nil && len(scopes) > 0 {
+		b.Scopes = scopes
+	}
 	return b
 }
 
@@ -55,7 +59,7 @@ func Provider(backend, clientid, clientsecret, scopes string) AuthRegistration {
 // from the backend. The values are only overwritten if they are empty.
 func FillDefaults(backend string, reg AuthRegistration) AuthRegistration {
 	def := GetRegistry(backend)
-	if reg.Scopes == "" {
+	if reg.Scopes == nil || len(reg.Scopes) == 0 {
 		reg.Scopes = def.Scopes
 	}
 	if reg.AuthURL == "" {
