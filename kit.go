@@ -42,7 +42,7 @@ type Unparsed map[string]interface{}
 // and the thumbnailurl are optional an can be empty.
 type AuthUser struct {
 	Network       string   `json:"network"`
-	UID           string   `json:"uid"`
+	ID            string   `json:"id"`
 	EMail         string   `json:"email"`
 	Name          string   `json:"name"`
 	BackgroundURL string   `json:"backgroundurl"`
@@ -158,9 +158,10 @@ func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	fmt.Printf("%v, %s, %s\n", reg, accesscode, redirect)
 	usr, tok, err := auth(reg, accesscode, redirect)
 	fmt.Printf("%v, %v, %s\n", usr, tok, err)
+	w.Header().Add("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(usr)
 }
 
 func auth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Token, error) {
@@ -204,7 +205,7 @@ func auth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Toke
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get id: %s", err)
 	}
-	res.UID = v
+	res.ID = v
 	v, err = getValue(reg.PathEMail, dat)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get email: %s", err)

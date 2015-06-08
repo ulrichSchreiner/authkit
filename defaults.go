@@ -15,7 +15,7 @@ var (
 			AuthURL:        "https://accounts.google.com/o/oauth2/auth",
 			AccessTokenURL: "https://accounts.google.com/o/oauth2/token",
 			UserinfoURL:    "https://www.googleapis.com/plus/v1/people/me",
-			PathID:         "emails[0].value",
+			PathID:         "id",
 			PathEMail:      "emails[0].value",
 			PathName:       "displayName",
 			PathPicture:    "image.url",

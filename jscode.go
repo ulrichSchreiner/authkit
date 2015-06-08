@@ -36,7 +36,7 @@ function login(provider) {
   if (p.scopes) {
     authU = authU + "&scope="+scopes;
   }
-  this.popup(authU, 500, 600);
+  popup(authU, 500, 600);
 }
 
 function popup (u, w, h) {
@@ -59,8 +59,9 @@ function popup (u, w, h) {
       
 function init () {
   if (!window[data.authCallback]) {
-    window[data.authCallback] = function (token) {
-      alert(token);
+    window[data.authCallback] = function (token, usr) {
+      //alert(usr);
+      console.log(usr);
       //self.orcaToken = token;
       //self.$.authuser.go();
     }
@@ -88,8 +89,9 @@ var redirect = `
       if (req.readyState == 4) {
         if(req.status == 200){
            var tok = req.getResponseHeader("orca-token");
-           window.opener[cbid](tok);
-           //window.close();
+           var usr = JSON.parse(req.responseText);
+           window.opener[cbid](tok, usr);
+           window.close();
         }
         else if(req.status == 400) {
             alert('There was an error processing the access code.')
