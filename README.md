@@ -5,10 +5,16 @@ this toolkit in your webapp and your browser and server will do the oauth2
 explicit flow. If the user is successfully authenticated a `JWT` token
 and a user structure is returned to the browser.
 
-Your client can then store the JWT token and embed this value to every call
+Your client can store the JWT token and embed this value to every call
 to one of your REST services. `authkit` also is a small middleware toolkit 
 which intercepts the requests and parses the `JWT` token. Your handler 
 functions will receive the authenticated user as an additional parameter.
+
+`autkit` is great for pure javascript apps which calls stateless REST services 
+where the user must be authenticated. You don't have to store a session or
+any other credential database in the backend of your servers. Simply create
+a login page, register this page with one of your favourite Oauth2 providers
+and let the user login and use your REST services.
 
 Put something like this in your server code:
 
