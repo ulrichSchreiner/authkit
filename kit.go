@@ -64,29 +64,88 @@ type AuthUser struct {
 }
 
 // A Token is a response from a backend provider.
-type Token map[string]string
+type Token struct {
+	AccessToken  string    `json:"access_token"`
+	TokenType    string    `json:"token_type"`
+	RefreshToken string    `json:"refresh_token"`
+	Expiry       time.Time `json:"expiry"`
+}
+
+// Values are additional values for the JWT token which can be
+// filled by the application.
+type Values map[string]string
+
+// Extender is a function which must return a expire duration
+// for the JWT token. The function also can return a map of (string,string)
+// pairs which will be embedded in the JWT token. If this function
+// returns an error, the whole authentication fails.
+type Extender func(AuthUser, Token) (time.Duration, Values, error)
+
+// Merge merges two extender functions. The duration of the extender
+// in the parameter list will be used. The values in the value map
+// will be merged so that the values of the given extender will
+// overwrite the others.
+func (tf Extender) Merge(f Extender) Extender {
+	return func(u AuthUser, t Token) (time.Duration, Values, error) {
+		// first call original
+		od, ov, e := tf(u, t)
+		if e != nil {
+			return od, ov, e
+		}
+		// now new one
+		nd, nv, e := f(u, t)
+		if e != nil {
+			return nd, nv, e
+		}
+		if ov == nil {
+			ov = make(Values)
+		}
+		if nv != nil {
+			// if the new finalizer has values, put them in the other value map
+			for k, v := range nv {
+				ov[k] = v
+			}
+		}
+		return nd, ov, nil
+	}
+}
 
 // An Authkit stores a map of providers which are identified by a networkname.
 type Authkit struct {
-	providers          map[string]AuthRegistration
-	url                string
-	key                *rsa.PrivateKey
-	expireTokenSeconds time.Duration
+	// The Finalizer will be called at the end of the authentication to
+	// finalize the JWT token.
+	TokenExtender Extender
+	providers     map[string]AuthRegistration
+	url           string
+	key           *rsa.PrivateKey
+}
+
+// An AuthContext contains an authenticated user and additional claims
+type AuthContext struct {
+	User   AuthUser
+	Claims Values
 }
 
 // An AuthHandler is a callback function with the current authenticated
-// user as the first parameter.
-type AuthHandler func(u AuthUser, w http.ResponseWriter, rq *http.Request)
+// user and claims. The claims are all values which are stored
+// in the JWT token. You can put your own values with a specific TokenExtender
+// function in the Authkit.
+type AuthHandler func(ac *AuthContext, w http.ResponseWriter, rq *http.Request)
+
+func defaultExtender(u AuthUser, t Token) (time.Duration, Values, error) {
+	dur := 60 * time.Minute
+	return dur, nil, nil
+}
 
 // New returns a new Authkit with the given url as a prefix
-func New(url string, expireSeconds int) (*Authkit, error) {
+func New(url string) (*Authkit, error) {
 	a := &Authkit{}
 	a.providers = make(map[string]AuthRegistration)
 	if !strings.HasSuffix(url, "/") {
 		url = url + "/"
 	}
 	a.url = url
-	a.expireTokenSeconds = time.Duration(expireSeconds)
+	a.TokenExtender = defaultExtender
 	return a, a.generateKey()
 }
 
@@ -150,7 +209,12 @@ func (kit *Authkit) Handle(h AuthHandler) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		h(u, w, rq)
+		vals := make(Values)
+		for k, v := range tok.Claims {
+			vals[k] = fmt.Sprintf("%v", v)
+		}
+		ac := &AuthContext{u, vals}
+		h(ac, w, rq)
 	}
 }
 
@@ -223,20 +287,30 @@ func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	usr, _, err := oauth(reg, accesscode, redirect)
+	usr, tok, err := oauth(reg, accesscode, redirect)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("cannot authenticate: %s", err), http.StatusUnauthorized)
 		return
 	}
 	t := jwt.New(jwt.GetSigningMethod(signMethod))
 
-	usrBytes, err := json.Marshal(usr)
+	dur, vls, err := kit.TokenExtender(*usr, *tok)
 	if err != nil {
-		http.Error(w, "cannot marshal user as json", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("cannot finalize: %s", err), http.StatusInternalServerError)
 		return
 	}
+	usrBytes, err := json.Marshal(usr)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("cannot marshal user as json: %s", err), http.StatusInternalServerError)
+		return
+	}
+	if vls != nil {
+		for k, v := range vls {
+			t.Claims[k] = v
+		}
+	}
 	t.Claims["user"] = string(usrBytes)
-	t.Claims["exp"] = time.Now().Add(time.Second * kit.expireTokenSeconds).Unix()
+	t.Claims["exp"] = time.Now().Add(dur).Unix()
 	signed, err := t.SignedString(kit.key)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -247,7 +321,7 @@ func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
 	json.NewEncoder(w).Encode(usr)
 }
 
-func oauth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Token, error) {
+func oauth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, *Token, error) {
 	conf := &oauth2.Config{
 		ClientID:     reg.ClientID,
 		ClientSecret: reg.ClientSecret,
@@ -263,11 +337,7 @@ func oauth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Tok
 	if err != nil {
 		return nil, nil, fmt.Errorf("error when exchanging accesscode to token: %s", err)
 	}
-	atok := make(Token)
-	atok["access_token"] = tok.AccessToken
-	atok["token_type"] = tok.TokenType
-	atok["refresh_token"] = tok.RefreshToken
-	atok["expires_in"] = strconv.Itoa(int(tok.Expiry.Sub(time.Now()).Seconds()))
+	kitToken := &Token{tok.AccessToken, tok.TokenType, tok.RefreshToken, tok.Expiry}
 	client := conf.Client(oauth2.NoContext, tok)
 	req, err := http.NewRequest("GET", reg.UserinfoURL, nil)
 	if err != nil {
@@ -329,12 +399,10 @@ func oauth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Tok
 		}
 		res.ThumbnailURL = v
 	}
-	return &res, atok, nil
+	return &res, kitToken, nil
 }
 
 func parse(r io.Reader) (map[string]interface{}, error) {
-	//buf, e := ioutil.ReadAll(r)
-	//log.Printf("%s: %#v", e, string(buf))
 	m := make(map[string]interface{})
 
 	if err := json.NewDecoder(r).Decode(&m); err != nil {
@@ -352,14 +420,13 @@ func getValue(path string, data map[string]interface{}) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		if val == nil {
+			return "", nil
+		}
 		if idx < len(parts)-1 {
 			target = val.(map[string]interface{})
 		} else {
-			if val == nil {
-				res = ""
-			} else {
-				res = val.(string)
-			}
+			res = val.(string)
 		}
 	}
 	return res, nil
@@ -374,7 +441,11 @@ func getSimpleValue(v string, data map[string]interface{}) (interface{}, error) 
 		}
 		indx := int(index64)
 		key := v[0:loc[0]]
-		res := data[key].([]interface{})
+		val, _ := data[key]
+		if val == nil {
+			return nil, nil
+		}
+		res := val.([]interface{})
 		return res[indx], nil
 	}
 	return data[v], nil

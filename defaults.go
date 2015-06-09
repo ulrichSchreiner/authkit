@@ -39,7 +39,7 @@ var (
 		},
 		LiveNetwork: AuthRegistration{
 			Network:        LiveNetwork,
-			Scopes:         []string{"wl.signin"}, // ,"wl.basic","wl.emails"
+			Scopes:         []string{"wl.signin"},
 			AuthURL:        "https://login.live.com/oauth20_authorize.srf",
 			AccessTokenURL: "https://login.live.com/oauth20_token.srf",
 			UserinfoURL:    "https://apis.live.net/v5.0/me",
@@ -51,15 +51,15 @@ var (
 		},
 		LinkedInNetwork: AuthRegistration{
 			Network:        LinkedInNetwork,
-			Scopes:         []string{"r_basicprofile"},
+			Scopes:         []string{"r_basicprofile", "r_emailaddress"},
 			AuthURL:        "https://www.linkedin.com/uas/oauth2/authorization",
 			AccessTokenURL: "https://www.linkedin.com/uas/oauth2/accessToken",
 			UserinfoOpaque: "/v1/people/~:(picture-url,first-name,last-name,id,formatted-name,email-address)?format=json",
 			UserinfoURL:    "https://api.linkedin.com",
 			PathID:         "id",
-			PathEMail:      "emails.account",
-			PathName:       "name",
-			PathPicture:    "",
+			PathEMail:      "emailAddress",
+			PathName:       "formattedName",
+			PathPicture:    "pictureUrl",
 			PathCover:      "",
 		},
 	}

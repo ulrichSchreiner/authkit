@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/ulrichSchreiner/authkit"
 )
@@ -60,20 +62,31 @@ func index(w http.ResponseWriter, rq *http.Request) {
 	indexTemplate.Execute(w, nil)
 }
 
-func test(u authkit.AuthUser, w http.ResponseWriter, rq *http.Request) {
-	log.Printf("user: %#v", u)
+func test(ac *authkit.AuthContext, w http.ResponseWriter, rq *http.Request) {
+	log.Printf("user: %#v", ac.User)
+	for k, v := range ac.Claims {
+		log.Printf(" - vals[%s] = %s\n", k, v)
+	}
+}
+
+func extend(u authkit.AuthUser, t authkit.Token) (time.Duration, authkit.Values, error) {
+	v := make(authkit.Values)
+	v["name"] = u.Name + " - " + u.EMail
+	return 60 * time.Second, v, nil
 }
 
 func main() {
-	a, e := authkit.New("/authkit", 60)
+	a, e := authkit.New("/authkit")
 	if e != nil {
 		panic(e)
 	}
 	key, e := os.Open(os.Getenv("AUTHKIT_KEY"))
-	if e != nil {
-		panic(e)
+	if e == nil {
+		a.UseKey(key)
+	} else {
+		fmt.Printf("no key found, generated one:\n%s\n", a.DumpKey())
 	}
-	a.UseKey(key)
+	a.TokenExtender = a.TokenExtender.Merge(extend)
 	a.Add(authkit.Provider(authkit.GoogleNetwork, os.Getenv("GOOGLE_CLIENTID"), os.Getenv("GOOGLE_CLIENTSECRET")))
 	a.Add(authkit.Provider(authkit.GithubNetwork, os.Getenv("GITHUB_CLIENTID"), os.Getenv("GITHUB_CLIENTSECRET")))
 	a.Add(authkit.Provider(authkit.LiveNetwork, os.Getenv("LIVE_CLIENTID"), os.Getenv("LIVE_CLIENTSECRET")))
