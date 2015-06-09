@@ -1,22 +1,34 @@
 package authkit
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"html/template"
 	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
+
 	"golang.org/x/oauth2"
 )
 
-import "net/http"
+const (
+	signMethod = "RS256"
+	rsaHeader  = "RSA PRIVATE KEY"
+)
 
 var (
 	arIndex = regexp.MustCompile(`\[\d\]`)
-	version string
 )
 
 // AuthRegistration describes a provider to authenticate against.
@@ -27,6 +39,7 @@ type AuthRegistration struct {
 	Scopes         []string `json:"scopes"`
 	AuthURL        string   `json:"authurl"`
 	AccessTokenURL string   `json:"accesstokenurl"`
+	UserinfoOpaque string   `json:"userinfo_opaque"`
 	UserinfoURL    string   `json:"userinfo_url"`
 	PathEMail      string   `json:"pathemail"`
 	PathID         string   `json:"pathid"`
@@ -55,8 +68,10 @@ type Token map[string]string
 
 // An Authkit stores a map of providers which are identified by a networkname.
 type Authkit struct {
-	providers map[string]AuthRegistration
-	url       string
+	providers          map[string]AuthRegistration
+	url                string
+	key                *rsa.PrivateKey
+	expireTokenSeconds time.Duration
 }
 
 // An AuthHandler is a callback function with the current authenticated
@@ -64,14 +79,15 @@ type Authkit struct {
 type AuthHandler func(u AuthUser, w http.ResponseWriter, rq *http.Request)
 
 // New returns a new Authkit with the given url as a prefix
-func New(url string) *Authkit {
+func New(url string, expireSeconds int) (*Authkit, error) {
 	a := &Authkit{}
 	a.providers = make(map[string]AuthRegistration)
 	if !strings.HasSuffix(url, "/") {
 		url = url + "/"
 	}
 	a.url = url
-	return a
+	a.expireTokenSeconds = time.Duration(expireSeconds)
+	return a, a.generateKey()
 }
 
 // Add will add the given registration to the map of providers. If there
@@ -81,10 +97,60 @@ func (kit *Authkit) Add(r AuthRegistration) {
 	kit.providers[r.Network] = r
 }
 
+func (kit *Authkit) generateKey() error {
+	pk, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return fmt.Errorf("cannot create new rsa key: %s", err)
+	}
+	kit.key = pk
+	return nil
+}
+
+// DumpKey returns a string representation of the current RSA private key
+func (kit *Authkit) DumpKey() string {
+	data := pem.Block{Type: rsaHeader, Bytes: x509.MarshalPKCS1PrivateKey(kit.key)}
+	return string(pem.EncodeToMemory(&data))
+}
+
+// UseKey puts the PEM encoded key from the given reader to the authkit.
+func (kit *Authkit) UseKey(r io.Reader) error {
+	b, e := ioutil.ReadAll(r)
+	if e != nil {
+		return fmt.Errorf("cannot read data from key: %s", e)
+	}
+	blk, _ := pem.Decode(b)
+	if blk.Type != rsaHeader {
+		return fmt.Errorf("only '%s' supported, but type is '%s'", rsaHeader, blk.Type)
+	}
+	k, e := x509.ParsePKCS1PrivateKey(blk.Bytes)
+	if e != nil {
+		return fmt.Errorf("cannot parse the private key: %s", e)
+	}
+	kit.key = k
+	return nil
+}
+
 // Handle turns a AuthHandler to a normal HandlerFunc
 func (kit *Authkit) Handle(h AuthHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, rq *http.Request) {
-		h(AuthUser{}, w, rq)
+		tok, err := jwt.ParseFromRequest(rq, func(token *jwt.Token) (interface{}, error) {
+			return kit.key.Public(), nil
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		if !tok.Valid {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+		usrBytes := tok.Claims["user"].(string)
+		var u AuthUser
+		if err := json.Unmarshal([]byte(usrBytes), &u); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h(u, w, rq)
 	}
 }
 
@@ -98,6 +164,7 @@ func (kit *Authkit) Register(mux *http.ServeMux) {
 	mux.Handle(kit.url, kit)
 }
 
+// The authkit is a general http handler
 func (kit *Authkit) ServeHTTP(w http.ResponseWriter, rq *http.Request) {
 	pt := rq.URL.Path
 	if pt == kit.url+"js" {
@@ -110,30 +177,29 @@ func (kit *Authkit) ServeHTTP(w http.ResponseWriter, rq *http.Request) {
 	}
 }
 
-func (kit *Authkit) js(w http.ResponseWriter, rq *http.Request) {
-	w.Header().Set("Content-Type", "application/javascript")
-	loginTemplate.Execute(w, struct {
+func (kit *Authkit) template(ct string, t *template.Template, w http.ResponseWriter, rq *http.Request) {
+	w.Header().Set("Content-Type", ct)
+	t.Execute(w, struct {
 		Providers map[string]AuthRegistration
-		Version   string
 		Base      string
 	}{
 		Providers: kit.providers,
-		Version:   version,
 		Base:      kit.url,
 	})
 }
 
+func (kit *Authkit) js(w http.ResponseWriter, rq *http.Request) {
+	kit.template("application/javascript", loginTemplate, w, rq)
+}
+
 func (kit *Authkit) redirect(w http.ResponseWriter, rq *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	redirectTemplate.Execute(w, struct {
-		Providers map[string]AuthRegistration
-		Version   string
-		Base      string
-	}{
-		Providers: kit.providers,
-		Version:   version,
-		Base:      kit.url,
-	})
+	remoteError := rq.FormValue("error")
+	if remoteError != "" {
+		errDesc := rq.FormValue("error_description")
+		http.Error(w, fmt.Sprintf("%s: %s", remoteError, errDesc), http.StatusUnauthorized)
+		return
+	}
+	kit.template("text/html", redirectTemplate, w, rq)
 }
 
 func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
@@ -146,25 +212,42 @@ func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
 	state := rq.FormValue("state")
 	res := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(state), &res); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	network := res["network"].(string)
 	redirect := res["redirect_uri"].(string)
 	reg, hasNetwork := kit.providers[network]
 	if !hasNetwork {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("unknown network: %s", network)))
+		http.Error(w, fmt.Sprintf("unknown network: %s", network), http.StatusInternalServerError)
 		return
 	}
 
-	usr, tok, err := auth(reg, accesscode, redirect)
-	fmt.Printf("%v, %v, %s\n", usr, tok, err)
+	usr, _, err := oauth(reg, accesscode, redirect)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("cannot authenticate: %s", err), http.StatusUnauthorized)
+		return
+	}
+	t := jwt.New(jwt.GetSigningMethod(signMethod))
+
+	usrBytes, err := json.Marshal(usr)
+	if err != nil {
+		http.Error(w, "cannot marshal user as json", http.StatusInternalServerError)
+		return
+	}
+	t.Claims["user"] = string(usrBytes)
+	t.Claims["exp"] = time.Now().Add(time.Second * kit.expireTokenSeconds).Unix()
+	signed, err := t.SignedString(kit.key)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Add("Content-Type", "application/json")
+	w.Header().Add("Authorization", fmt.Sprintf("Bearer %s", signed))
 	json.NewEncoder(w).Encode(usr)
 }
 
-func auth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Token, error) {
+func oauth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Token, error) {
 	conf := &oauth2.Config{
 		ClientID:     reg.ClientID,
 		ClientSecret: reg.ClientSecret,
@@ -177,9 +260,8 @@ func auth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Toke
 	}
 
 	tok, err := conf.Exchange(oauth2.NoContext, accesscode)
-	fmt.Printf("%#v returned: %#v, %s\n", *conf, tok, err)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("error when exchanging accesscode to token: %s", err)
 	}
 	atok := make(Token)
 	atok["access_token"] = tok.AccessToken
@@ -187,15 +269,32 @@ func auth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Toke
 	atok["refresh_token"] = tok.RefreshToken
 	atok["expires_in"] = strconv.Itoa(int(tok.Expiry.Sub(time.Now()).Seconds()))
 	client := conf.Client(oauth2.NoContext, tok)
-	rsp, err := client.Get(reg.UserinfoURL)
+	req, err := http.NewRequest("GET", reg.UserinfoURL, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("cannot parse create request : %s", err)
+	}
+	req.URL, err = url.Parse(reg.UserinfoURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot parse userinfo-url '%s': %s", reg.UserinfoURL, err)
+	}
+	if reg.UserinfoOpaque != "" {
+		req.URL.Path = ""
+		req.URL.Opaque = reg.UserinfoOpaque
+	}
+	rsp, err := client.Do(req)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot fetch userinfo from '%s': %s", reg.UserinfoURL, err)
 	}
 	defer rsp.Body.Close()
+	if rsp.StatusCode/100 != 2 {
+		dat, _ := ioutil.ReadAll(rsp.Body)
+		return nil, nil, fmt.Errorf("cannot fetch userinfo from '%s', Status: %d: %s", reg.UserinfoURL, rsp.StatusCode, string(dat))
+	}
 
 	dat, err := parse(rsp.Body)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("cannot parse response body: %s", err)
 	}
 
 	var res AuthUser
@@ -234,6 +333,8 @@ func auth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, Toke
 }
 
 func parse(r io.Reader) (map[string]interface{}, error) {
+	//buf, e := ioutil.ReadAll(r)
+	//log.Printf("%s: %#v", e, string(buf))
 	m := make(map[string]interface{})
 
 	if err := json.NewDecoder(r).Decode(&m); err != nil {
@@ -254,7 +355,11 @@ func getValue(path string, data map[string]interface{}) (string, error) {
 		if idx < len(parts)-1 {
 			target = val.(map[string]interface{})
 		} else {
-			res = val.(string)
+			if val == nil {
+				res = ""
+			} else {
+				res = val.(string)
+			}
 		}
 	}
 	return res, nil

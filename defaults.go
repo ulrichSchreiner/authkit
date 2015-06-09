@@ -1,10 +1,14 @@
 package authkit
 
 const (
-	// GoogleNetwork is a constant for google
+	// GoogleNetwork constant.
 	GoogleNetwork = "google"
-	// GithubNetwork is a constant for github
+	// GithubNetwork constant.
 	GithubNetwork = "github"
+	// LiveNetwork constant
+	LiveNetwork = "windows"
+	// LinkedInNetwork constant
+	LinkedInNetwork = "linkedin"
 )
 
 var (
@@ -31,6 +35,31 @@ var (
 			PathEMail:      "email",
 			PathName:       "name",
 			PathPicture:    "avatar_url",
+			PathCover:      "",
+		},
+		LiveNetwork: AuthRegistration{
+			Network:        LiveNetwork,
+			Scopes:         []string{"wl.signin"}, // ,"wl.basic","wl.emails"
+			AuthURL:        "https://login.live.com/oauth20_authorize.srf",
+			AccessTokenURL: "https://login.live.com/oauth20_token.srf",
+			UserinfoURL:    "https://apis.live.net/v5.0/me",
+			PathID:         "id",
+			PathEMail:      "emails.account",
+			PathName:       "name",
+			PathPicture:    "",
+			PathCover:      "",
+		},
+		LinkedInNetwork: AuthRegistration{
+			Network:        LinkedInNetwork,
+			Scopes:         []string{"r_basicprofile"},
+			AuthURL:        "https://www.linkedin.com/uas/oauth2/authorization",
+			AccessTokenURL: "https://www.linkedin.com/uas/oauth2/accessToken",
+			UserinfoOpaque: "/v1/people/~:(picture-url,first-name,last-name,id,formatted-name,email-address)?format=json",
+			UserinfoURL:    "https://api.linkedin.com",
+			PathID:         "id",
+			PathEMail:      "emails.account",
+			PathName:       "name",
+			PathPicture:    "",
 			PathCover:      "",
 		},
 	}
