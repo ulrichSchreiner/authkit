@@ -24,7 +24,7 @@ Put something like this in your server code:
 a, e := authkit.New("/authkit") // <-- this name will be in the URL
 ...
 a.Add(authkit.Provider(
-  authkit.GoogleNetwork, 
+  authkit.Google, 
   os.Getenv("GOOGLE_CLIENTID"), 
   os.Getenv("GOOGLE_CLIENTSECRET")))
 a.RegisterDefault()
@@ -51,4 +51,4 @@ Current supported providers:
   - Google
   - Github
   - Linkedin
-  - Windows (Live)
+  - Live (Windows)

@@ -1,20 +1,20 @@
 package authkit
 
 const (
-	// GoogleNetwork constant.
-	GoogleNetwork = "google"
-	// GithubNetwork constant.
-	GithubNetwork = "github"
-	// LiveNetwork constant
-	LiveNetwork = "windows"
-	// LinkedInNetwork constant
-	LinkedInNetwork = "linkedin"
+	// Google constant.
+	Google = "google"
+	// Github constant.
+	Github = "github"
+	// Live constant
+	Live = "windows"
+	// LinkedIn constant
+	LinkedIn = "linkedin"
 )
 
 var (
 	defaultBackends = map[string]AuthRegistration{
-		GoogleNetwork: AuthRegistration{
-			Network:        GoogleNetwork,
+		Google: AuthRegistration{
+			Network:        Google,
 			Scopes:         []string{"openid", "profile", "email", "https://www.googleapis.com/auth/plus.me"},
 			AuthURL:        "https://accounts.google.com/o/oauth2/auth",
 			AccessTokenURL: "https://accounts.google.com/o/oauth2/token",
@@ -25,8 +25,8 @@ var (
 			PathPicture:    "image.url",
 			PathCover:      "cover.coverPhoto.url",
 		},
-		GithubNetwork: AuthRegistration{
-			Network:        GithubNetwork,
+		Github: AuthRegistration{
+			Network:        Github,
 			Scopes:         []string{"user:email"},
 			AuthURL:        "https://github.com/login/oauth/authorize",
 			AccessTokenURL: "https://github.com/login/oauth/access_token",
@@ -37,8 +37,8 @@ var (
 			PathPicture:    "avatar_url",
 			PathCover:      "",
 		},
-		LiveNetwork: AuthRegistration{
-			Network:        LiveNetwork,
+		Live: AuthRegistration{
+			Network:        Live,
 			Scopes:         []string{"wl.signin"},
 			AuthURL:        "https://login.live.com/oauth20_authorize.srf",
 			AccessTokenURL: "https://login.live.com/oauth20_token.srf",
@@ -49,8 +49,8 @@ var (
 			PathPicture:    "",
 			PathCover:      "",
 		},
-		LinkedInNetwork: AuthRegistration{
-			Network:        LinkedInNetwork,
+		LinkedIn: AuthRegistration{
+			Network:        LinkedIn,
 			Scopes:         []string{"r_basicprofile", "r_emailaddress"},
 			AuthURL:        "https://www.linkedin.com/uas/oauth2/authorization",
 			AccessTokenURL: "https://www.linkedin.com/uas/oauth2/accessToken",
