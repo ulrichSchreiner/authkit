@@ -18,7 +18,7 @@ and let the user login and use your REST services.
 
 Put something like this in your server code:
 
-```
+```go
 // register your OAUTH-apps with "<scheme>://<server>:<port>/authkit" and
 // "<scheme>://<server>:<port>/authkit/redirect"
 a, e := authkit.New("/authkit") // <-- this name will be in the URL
