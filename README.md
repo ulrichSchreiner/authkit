@@ -38,7 +38,7 @@ func test(ac *authkit.AuthContext, w http.ResponseWriter, rq *http.Request) {
 }
 ```
 and your client should embed the JS library:
-```
+```javascript
 <script src="/authkit/js"></script>
 
 authkit.login('google').user(function (usr, tok) {
