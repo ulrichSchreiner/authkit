@@ -11,7 +11,22 @@ associated to verify the JWT token.
 
 You can embed this toolkit in your webapp and your browser and server will 
 do the oauth2 explicit flow. If the user is successfully authenticated a `JWT` 
-token and a user structure is returned to the browser.
+token and a user structure is returned to the browser. On the serverside your
+code will receive a `AuthUser` which contains the following fields:
+```go
+// An AuthUser is a Uid and a Name. The backgroundurl
+// and the thumbnailurl are optional an can be empty.
+type AuthUser struct {
+	Network       string   `json:"network"`
+	ID            string   `json:"id"`
+	EMail         string   `json:"email"`
+	Name          string   `json:"name"`
+	BackgroundURL string   `json:"backgroundurl"`
+	ThumbnailURL  string   `json:"thumbnail"`
+	Fields        Unparsed `json:"fields"`
+}
+```
+The `Fields` field contains the structure sent from the provider.
 
 Your client can store the JWT token and embed this value to every call
 to one of your REST services. `authkit` also is a small middleware toolkit 
