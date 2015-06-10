@@ -32,9 +32,9 @@ function login () {
   });
 }
 
-function execRequest () {
+function execRequest (path) {
   var req = new XMLHttpRequest();
-  req.open("GET", "/authed/");
+  req.open("GET", path);
   req.setRequestHeader("Authorization", token);
   req.send(null);
 }
@@ -49,7 +49,8 @@ $(function () {
 <select id="providerList"></select>
 
 <button onclick="login()">Login </button>
-<button onclick="execRequest()" id="execRQ" disabled=disabled>Execute Request</button>
+<button onclick="execRequest('/authed/')" id="execRQ" disabled=disabled>Execute Secure Request</button>
+<button onclick="execRequest('/normal/')" id="execNormal" >Execute unsecure Request</button>
 <hr size="1" width="90%">
 <div><tt id="token"></tt></div>
 <div><tt><pre id="user"></pre></tt></div>
@@ -58,14 +59,25 @@ $(function () {
 
 `))
 
+var kit = authkit.Must("/authkit")
+
 func index(w http.ResponseWriter, rq *http.Request) {
 	indexTemplate.Execute(w, nil)
 }
 
-func test(ac *authkit.AuthContext, w http.ResponseWriter, rq *http.Request) {
+func authed(ac *authkit.AuthContext, w http.ResponseWriter, rq *http.Request) {
 	log.Printf("user: %#v", ac.User)
 	for k, v := range ac.Claims {
 		log.Printf(" - vals[%s] = %s\n", k, v)
+	}
+}
+
+func normal(w http.ResponseWriter, rq *http.Request) {
+	ctx, err := kit.Context(rq)
+	if err != nil {
+		log.Printf("no valid auth context found: %s", err)
+	} else {
+		log.Printf("current authenticated user: %#v", ctx.User)
 	}
 }
 
@@ -76,25 +88,22 @@ func extend(u authkit.AuthUser, t authkit.Token) (time.Duration, authkit.Values,
 }
 
 func main() {
-	a, e := authkit.New("/authkit")
-	if e != nil {
-		panic(e)
-	}
 	key, e := os.Open(os.Getenv("AUTHKIT_KEY"))
 	if e == nil {
-		a.UseKey(key)
+		kit.UseKey(key)
 	} else {
-		fmt.Printf("no key found, generated one:\n%s\n", a.DumpKey())
+		fmt.Printf("no key found, generated one:\n%s\n", kit.DumpKey())
 	}
-	a.TokenExtender = a.TokenExtender.Merge(extend)
-	a.Add(authkit.Provider(authkit.Google, os.Getenv("GOOGLE_CLIENTID"), os.Getenv("GOOGLE_CLIENTSECRET")))
-	a.Add(authkit.Provider(authkit.Github, os.Getenv("GITHUB_CLIENTID"), os.Getenv("GITHUB_CLIENTSECRET")))
-	a.Add(authkit.Provider(authkit.Live, os.Getenv("LIVE_CLIENTID"), os.Getenv("LIVE_CLIENTSECRET")))
-	a.Add(authkit.Provider(authkit.LinkedIn, os.Getenv("LINKEDIN_CLIENTID"), os.Getenv("LINKEDIN_CLIENTSECRET")))
-	a.RegisterDefault()
+	kit.TokenExtender = kit.TokenExtender.Merge(extend)
+	kit.Add(authkit.Provider(authkit.Google, os.Getenv("GOOGLE_CLIENTID"), os.Getenv("GOOGLE_CLIENTSECRET")))
+	kit.Add(authkit.Provider(authkit.Github, os.Getenv("GITHUB_CLIENTID"), os.Getenv("GITHUB_CLIENTSECRET")))
+	kit.Add(authkit.Provider(authkit.Live, os.Getenv("LIVE_CLIENTID"), os.Getenv("LIVE_CLIENTSECRET")))
+	kit.Add(authkit.Provider(authkit.LinkedIn, os.Getenv("LINKEDIN_CLIENTID"), os.Getenv("LINKEDIN_CLIENTSECRET")))
+	kit.RegisterDefault()
 
-	log.Printf("%#v", a)
-	http.HandleFunc("/authed/", a.Handle(test))
+	log.Printf("%#v", kit)
+	http.HandleFunc("/authed/", kit.Handle(authed))
+	http.HandleFunc("/normal/", normal)
 	http.HandleFunc("/", index)
 	http.ListenAndServe(":8080", nil)
 }

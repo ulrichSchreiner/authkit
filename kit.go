@@ -150,6 +150,15 @@ func New(url string) (*Authkit, error) {
 	return a, a.generateKey()
 }
 
+// Must returns a new kit or panics if it fails
+func Must(url string) *Authkit {
+	k, e := New(url)
+	if e != nil {
+		panic(e)
+	}
+	return k
+}
+
 // Add will add the given registration to the map of providers. If there
 // is already a provider with the same 'Network' name, the old one will
 // be overwritten.
@@ -190,31 +199,37 @@ func (kit *Authkit) UseKey(r io.Reader) error {
 	return nil
 }
 
+// Context returns the current authentication context from the given request.
+func (kit *Authkit) Context(rq *http.Request) (*AuthContext, error) {
+	tok, err := jwt.ParseFromRequest(rq, func(token *jwt.Token) (interface{}, error) {
+		return kit.key.Public(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !tok.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	usrBytes := tok.Claims["user"].(string)
+	var u AuthUser
+	if err := json.Unmarshal([]byte(usrBytes), &u); err != nil {
+		return nil, fmt.Errorf("cannot unmarshal user: %s", err)
+	}
+	vals := make(Values)
+	for k, v := range tok.Claims {
+		vals[k] = fmt.Sprintf("%v", v)
+	}
+	ac := &AuthContext{u, vals}
+	return ac, nil
+}
+
 // Handle turns a AuthHandler to a normal HandlerFunc
 func (kit *Authkit) Handle(h AuthHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, rq *http.Request) {
-		tok, err := jwt.ParseFromRequest(rq, func(token *jwt.Token) (interface{}, error) {
-			return kit.key.Public(), nil
-		})
+		ac, err := kit.Context(rq)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
 		}
-		if !tok.Valid {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
-			return
-		}
-		usrBytes := tok.Claims["user"].(string)
-		var u AuthUser
-		if err := json.Unmarshal([]byte(usrBytes), &u); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		vals := make(Values)
-		for k, v := range tok.Claims {
-			vals[k] = fmt.Sprintf("%v", v)
-		}
-		ac := &AuthContext{u, vals}
 		h(ac, w, rq)
 	}
 }

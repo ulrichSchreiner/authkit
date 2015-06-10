@@ -25,16 +25,16 @@ Put something like this in your server code:
 ```go
 // register your OAUTH-apps with "<scheme>://<server>:<port>/authkit" and
 // "<scheme>://<server>:<port>/authkit/redirect"
-a, e := authkit.New("/authkit") // <-- this name will be in the URL
+var kit = authkit.Must("/authkit") // <-- this name will be in the URL
 ...
-a.Add(authkit.Provider(
+kit.Add(authkit.Provider(
   authkit.Google, 
   os.Getenv("GOOGLE_CLIENTID"), 
   os.Getenv("GOOGLE_CLIENTSECRET")))
-a.RegisterDefault()
-http.HandleFunc("/authed/", a.Handle(test))
+kit.RegisterDefault()
+http.HandleFunc("/authed/", a.Handle(authed))
 ...
-func test(ac *authkit.AuthContext, w http.ResponseWriter, rq *http.Request) {
+func authed(ac *authkit.AuthContext, w http.ResponseWriter, rq *http.Request) {
 	log.Printf("user: %#v", ac.User)
 	for k, v := range ac.Claims {
 		log.Printf(" - vals[%s] = %s\n", k, v)
@@ -48,6 +48,19 @@ and your client should embed the JS library:
 authkit.login('google').user(function (usr, tok) {
   ...
 });
+```
+
+If you want to use some specific webframeworks or don't like the extended
+method signature, you can pull the context out of a normal web request:
+```go
+func normal(w http.ResponseWriter, rq *http.Request) {
+	ctx, err := kit.Context(rq)
+	if err != nil {
+		log.Printf("no valid auth context found: %s", err)
+	} else {
+		log.Printf("current authenticated user: %#v", ctx.User)
+	}
+}
 ```
 
 Current supported providers:
