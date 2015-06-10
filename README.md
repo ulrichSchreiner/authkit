@@ -17,13 +17,13 @@ code will receive a `AuthUser` which contains the following fields:
 // An AuthUser is a Uid and a Name. The backgroundurl
 // and the thumbnailurl are optional an can be empty.
 type AuthUser struct {
-	Network       NetworkType   `json:"network"`
-	ID            string        `json:"id"`
-	EMail         string        `json:"email"`
-	Name          string        `json:"name"`
-	BackgroundURL string        `json:"backgroundurl"`
-	ThumbnailURL  string        `json:"thumbnail"`
-	Fields        Unparsed      `json:"fields"`
+	Network       Provider   `json:"network"`
+	ID            string     `json:"id"`
+	EMail         string     `json:"email"`
+	Name          string     `json:"name"`
+	BackgroundURL string     `json:"backgroundurl"`
+	ThumbnailURL  string     `json:"thumbnail"`
+	Fields        Unparsed   `json:"fields"`
 }
 ```
 The `Fields` field contains the structure sent from the provider.
@@ -42,7 +42,7 @@ Put something like this in your server code:
 // "<scheme>://<server>:<port>/authkit/redirect"
 var kit = authkit.Must("/authkit") // <-- this name will be in the URL
 ...
-kit.Add(authkit.Provider(
+kit.Add(authkit.Instance(
   authkit.Google, 
   os.Getenv("GOOGLE_CLIENTID"), 
   os.Getenv("GOOGLE_CLIENTSECRET")))

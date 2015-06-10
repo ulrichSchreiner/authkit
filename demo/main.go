@@ -95,10 +95,10 @@ func main() {
 		fmt.Printf("no key found, generated one:\n%s\n", kit.DumpKey())
 	}
 	kit.TokenExtender = kit.TokenExtender.Merge(extend)
-	kit.Add(authkit.Provider(authkit.Google, os.Getenv("GOOGLE_CLIENTID"), os.Getenv("GOOGLE_CLIENTSECRET")))
-	kit.Add(authkit.Provider(authkit.Github, os.Getenv("GITHUB_CLIENTID"), os.Getenv("GITHUB_CLIENTSECRET")))
-	kit.Add(authkit.Provider(authkit.Live, os.Getenv("LIVE_CLIENTID"), os.Getenv("LIVE_CLIENTSECRET")))
-	kit.Add(authkit.Provider(authkit.LinkedIn, os.Getenv("LINKEDIN_CLIENTID"), os.Getenv("LINKEDIN_CLIENTSECRET")))
+	kit.Add(authkit.Instance(authkit.Google, os.Getenv("GOOGLE_CLIENTID"), os.Getenv("GOOGLE_CLIENTSECRET")))
+	kit.Add(authkit.Instance(authkit.Github, os.Getenv("GITHUB_CLIENTID"), os.Getenv("GITHUB_CLIENTSECRET")))
+	kit.Add(authkit.Instance(authkit.Live, os.Getenv("LIVE_CLIENTID"), os.Getenv("LIVE_CLIENTSECRET")))
+	kit.Add(authkit.Instance(authkit.LinkedIn, os.Getenv("LINKEDIN_CLIENTID"), os.Getenv("LINKEDIN_CLIENTSECRET")))
 	kit.RegisterDefault()
 
 	log.Printf("%#v", kit)
