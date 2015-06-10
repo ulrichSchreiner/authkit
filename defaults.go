@@ -2,17 +2,17 @@ package authkit
 
 const (
 	// Google constant.
-	Google = "google"
+	Google NetworkType = "google"
 	// Github constant.
-	Github = "github"
+	Github NetworkType = "github"
 	// Live constant
-	Live = "windows"
+	Live NetworkType = "windows"
 	// LinkedIn constant
-	LinkedIn = "linkedin"
+	LinkedIn NetworkType = "linkedin"
 )
 
 var (
-	defaultBackends = map[string]AuthRegistration{
+	defaultBackends = map[NetworkType]AuthRegistration{
 		Google: AuthRegistration{
 			Network:        Google,
 			Scopes:         []string{"openid", "profile", "email", "https://www.googleapis.com/auth/plus.me"},
@@ -70,14 +70,14 @@ var (
 
 // GetRegistry returns a registry description for the given backend or an
 // empty registration block.
-func GetRegistry(backend string) AuthRegistration {
+func GetRegistry(backend NetworkType) AuthRegistration {
 	res, _ := defaultBackends[backend]
 	return res
 }
 
 // Provider returns a new registration provider with the given clientid
 // and clientsecret.
-func Provider(backend, clientid, clientsecret string, scopes ...string) AuthRegistration {
+func Provider(backend NetworkType, clientid, clientsecret string, scopes ...string) AuthRegistration {
 	b := GetRegistry(backend)
 	b.ClientID = clientid
 	b.ClientSecret = clientsecret
@@ -89,7 +89,7 @@ func Provider(backend, clientid, clientsecret string, scopes ...string) AuthRegi
 
 // FillDefaults fills the given registration struct with the default values
 // from the backend. The values are only overwritten if they are empty.
-func FillDefaults(backend string, reg AuthRegistration) AuthRegistration {
+func FillDefaults(backend NetworkType, reg AuthRegistration) AuthRegistration {
 	def := GetRegistry(backend)
 	if reg.Scopes == nil || len(reg.Scopes) == 0 {
 		reg.Scopes = def.Scopes

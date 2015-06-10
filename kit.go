@@ -10,7 +10,6 @@ import (
 	"html/template"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -32,21 +31,24 @@ var (
 	arIndex = regexp.MustCompile(`\[\d\]`)
 )
 
+// A NetworkType is a name for a network provider.
+type NetworkType string
+
 // AuthRegistration describes a provider to authenticate against.
 type AuthRegistration struct {
-	Network        string   `json:"network"`
-	ClientID       string   `json:"clientid"`
-	ClientSecret   string   `json:"clientsecret"`
-	Scopes         []string `json:"scopes"`
-	AuthURL        string   `json:"authurl"`
-	AccessTokenURL string   `json:"accesstokenurl"`
-	UserinfoURLs   []string `json:"userinfo_urls"`
-	UserinfoBase   string   `json:"userinfo_base"`
-	PathEMail      string   `json:"pathemail"`
-	PathID         string   `json:"pathid"`
-	PathName       string   `json:"pathname"`
-	PathPicture    string   `json:"pathpicture"`
-	PathCover      string   `json:"pathcover"`
+	Network        NetworkType `json:"network"`
+	ClientID       string      `json:"clientid"`
+	ClientSecret   string      `json:"clientsecret"`
+	Scopes         []string    `json:"scopes"`
+	AuthURL        string      `json:"authurl"`
+	AccessTokenURL string      `json:"accesstokenurl"`
+	UserinfoURLs   []string    `json:"userinfo_urls"`
+	UserinfoBase   string      `json:"userinfo_base"`
+	PathEMail      string      `json:"pathemail"`
+	PathID         string      `json:"pathid"`
+	PathName       string      `json:"pathname"`
+	PathPicture    string      `json:"pathpicture"`
+	PathCover      string      `json:"pathcover"`
 }
 
 // An Unparsed value is a raw map with the unparsed json contents.
@@ -55,13 +57,13 @@ type Unparsed map[string]interface{}
 // An AuthUser is a Uid and a Name. The backgroundurl
 // and the thumbnailurl are optional an can be empty.
 type AuthUser struct {
-	Network       string   `json:"network"`
-	ID            string   `json:"id"`
-	EMail         string   `json:"email"`
-	Name          string   `json:"name"`
-	BackgroundURL string   `json:"backgroundurl"`
-	ThumbnailURL  string   `json:"thumbnail"`
-	Fields        Unparsed `json:"fields"`
+	Network       NetworkType `json:"network"`
+	ID            string      `json:"id"`
+	EMail         string      `json:"email"`
+	Name          string      `json:"name"`
+	BackgroundURL string      `json:"backgroundurl"`
+	ThumbnailURL  string      `json:"thumbnail"`
+	Fields        Unparsed    `json:"fields"`
 }
 
 // A Token is a response from a backend provider.
@@ -116,7 +118,7 @@ type Authkit struct {
 	// The Finalizer will be called at the end of the authentication to
 	// finalize the JWT token.
 	TokenExtender Extender
-	providers     map[string]AuthRegistration
+	providers     map[NetworkType]AuthRegistration
 	url           string
 	key           *rsa.PrivateKey
 }
@@ -141,7 +143,7 @@ func defaultExtender(u AuthUser, t Token) (time.Duration, Values, error) {
 // New returns a new Authkit with the given url as a prefix
 func New(url string) (*Authkit, error) {
 	a := &Authkit{}
-	a.providers = make(map[string]AuthRegistration)
+	a.providers = make(map[NetworkType]AuthRegistration)
 	if !strings.HasSuffix(url, "/") {
 		url = url + "/"
 	}
@@ -260,7 +262,7 @@ func (kit *Authkit) ServeHTTP(w http.ResponseWriter, rq *http.Request) {
 func (kit *Authkit) template(ct string, t *template.Template, w http.ResponseWriter, rq *http.Request) {
 	w.Header().Set("Content-Type", ct)
 	t.Execute(w, struct {
-		Providers map[string]AuthRegistration
+		Providers map[NetworkType]AuthRegistration
 		Base      string
 	}{
 		Providers: kit.providers,
@@ -295,7 +297,7 @@ func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	network := res["network"].(string)
+	network := NetworkType(res["network"].(string))
 	redirect := res["redirect_uri"].(string)
 	reg, hasNetwork := kit.providers[network]
 	if !hasNetwork {
@@ -384,7 +386,6 @@ func oauth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, *To
 	}
 	userdata := make(map[string]interface{})
 	userdata["url"] = res
-	log.Printf("userdata: %#v", userdata)
 	var authuser AuthUser
 	authuser.Network = reg.Network
 	authuser.Fields = userdata
