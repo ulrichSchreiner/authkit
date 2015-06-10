@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -39,8 +40,8 @@ type AuthRegistration struct {
 	Scopes         []string `json:"scopes"`
 	AuthURL        string   `json:"authurl"`
 	AccessTokenURL string   `json:"accesstokenurl"`
-	UserinfoOpaque string   `json:"userinfo_opaque"`
-	UserinfoURL    string   `json:"userinfo_url"`
+	UserinfoURLs   []string `json:"userinfo_urls"`
+	UserinfoBase   string   `json:"userinfo_base"`
 	PathEMail      string   `json:"pathemail"`
 	PathID         string   `json:"pathid"`
 	PathName       string   `json:"pathname"`
@@ -339,74 +340,86 @@ func oauth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, *To
 	}
 	kitToken := &Token{tok.AccessToken, tok.TokenType, tok.RefreshToken, tok.Expiry}
 	client := conf.Client(oauth2.NoContext, tok)
-	req, err := http.NewRequest("GET", reg.UserinfoURL, nil)
+	req, err := http.NewRequest("GET", "", nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot parse create request : %s", err)
+		return nil, nil, fmt.Errorf("cannot create request : %s", err)
 	}
-	req.URL, err = url.Parse(reg.UserinfoURL)
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot parse userinfo-url '%s': %s", reg.UserinfoURL, err)
-	}
-	if reg.UserinfoOpaque != "" {
+	var res []interface{}
+	for _, uu := range reg.UserinfoURLs {
+		req.URL, err = url.Parse(reg.UserinfoBase)
+		if err != nil {
+			return nil, nil, fmt.Errorf("cannot parse userinfo base '%s': %s", reg.UserinfoBase, err)
+		}
 		req.URL.Path = ""
-		req.URL.Opaque = reg.UserinfoOpaque
+		req.URL.Opaque = uu
+		rsp, err := client.Do(req)
+		if err != nil {
+			return nil, nil, fmt.Errorf("cannot fetch userinfo from '%s': %s", uu, err)
+		}
+		defer rsp.Body.Close()
+		if rsp.StatusCode/100 != 2 {
+			dat, _ := ioutil.ReadAll(rsp.Body)
+			return nil, nil, fmt.Errorf("cannot fetch userinfo from '%s', Status: %d: %s", uu, rsp.StatusCode, string(dat))
+		}
+		dat, err := parse(rsp.Body)
+		if err != nil {
+			return nil, nil, fmt.Errorf("cannot parse response body: %s", err)
+		}
+		res = append(res, dat)
 	}
-	rsp, err := client.Do(req)
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot fetch userinfo from '%s': %s", reg.UserinfoURL, err)
-	}
-	defer rsp.Body.Close()
-	if rsp.StatusCode/100 != 2 {
-		dat, _ := ioutil.ReadAll(rsp.Body)
-		return nil, nil, fmt.Errorf("cannot fetch userinfo from '%s', Status: %d: %s", reg.UserinfoURL, rsp.StatusCode, string(dat))
-	}
-
-	dat, err := parse(rsp.Body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot parse response body: %s", err)
-	}
-
-	var res AuthUser
-	res.Network = reg.Network
-	res.Fields = dat
-	v, err := getValue(reg.PathID, dat)
+	userdata := make(map[string]interface{})
+	userdata["url"] = res
+	log.Printf("userdata: %#v", userdata)
+	var authuser AuthUser
+	authuser.Network = reg.Network
+	authuser.Fields = userdata
+	v, err := getValue(reg.PathID, userdata)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get id: %s", err)
 	}
-	res.ID = v
-	v, err = getValue(reg.PathEMail, dat)
+	authuser.ID = v
+	v, err = getValue(reg.PathEMail, userdata)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get email: %s", err)
 	}
-	res.EMail = v
-	v, err = getValue(reg.PathName, dat)
+	authuser.EMail = v
+	v, err = getValue(reg.PathName, userdata)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get name: %s", err)
 	}
-	res.Name = v
+	authuser.Name = v
 	if reg.PathCover != "" {
-		v, err = getValue(reg.PathCover, dat)
+		v, err = getValue(reg.PathCover, userdata)
 		if err != nil {
 			return nil, nil, fmt.Errorf("cannot get cover: %s", err)
 		}
-		res.BackgroundURL = v
+		authuser.BackgroundURL = v
 	}
 	if reg.PathPicture != "" {
-		v, err = getValue(reg.PathPicture, dat)
+		v, err = getValue(reg.PathPicture, userdata)
 		if err != nil {
 			return nil, nil, fmt.Errorf("cannot get picture: %s", err)
 		}
-		res.ThumbnailURL = v
+		authuser.ThumbnailURL = v
 	}
-	return &res, kitToken, nil
+	return &authuser, kitToken, nil
 }
 
 func parse(r io.Reader) (map[string]interface{}, error) {
 	m := make(map[string]interface{})
-
-	if err := json.NewDecoder(r).Decode(&m); err != nil {
-		return nil, err
+	buf, e := ioutil.ReadAll(r)
+	if e != nil {
+		return nil, e
+	}
+	if err := json.Unmarshal(buf, &m); err != nil {
+		// try an array as response ...
+		// this is an ugly hack, but we do not know what the rest endpoint
+		// returns :-(
+		var ar []interface{}
+		if err := json.Unmarshal(buf, &ar); err != nil {
+			return nil, err
+		}
+		m["data"] = ar
 	}
 	return m, nil
 }

@@ -18,23 +18,25 @@ var (
 			Scopes:         []string{"openid", "profile", "email", "https://www.googleapis.com/auth/plus.me"},
 			AuthURL:        "https://accounts.google.com/o/oauth2/auth",
 			AccessTokenURL: "https://accounts.google.com/o/oauth2/token",
-			UserinfoURL:    "https://www.googleapis.com/plus/v1/people/me",
-			PathID:         "id",
-			PathEMail:      "emails[0].value",
-			PathName:       "displayName",
-			PathPicture:    "image.url",
-			PathCover:      "cover.coverPhoto.url",
+			UserinfoBase:   "https://www.googleapis.com",
+			UserinfoURLs:   []string{"/plus/v1/people/me"},
+			PathID:         "url[0].id",
+			PathEMail:      "url[0].emails[0].value",
+			PathName:       "url[0].displayName",
+			PathPicture:    "url[0].image.url",
+			PathCover:      "url[0].cover.coverPhoto.url",
 		},
 		Github: AuthRegistration{
 			Network:        Github,
 			Scopes:         []string{"user:email"},
 			AuthURL:        "https://github.com/login/oauth/authorize",
 			AccessTokenURL: "https://github.com/login/oauth/access_token",
-			UserinfoURL:    "https://api.github.com/user",
-			PathID:         "login",
-			PathEMail:      "email",
-			PathName:       "name",
-			PathPicture:    "avatar_url",
+			UserinfoBase:   "https://api.github.com",
+			UserinfoURLs:   []string{"/user", "/user/emails"},
+			PathID:         "url[0].login",
+			PathEMail:      "url[1].data[0].email",
+			PathName:       "url[0].name",
+			PathPicture:    "url[0].avatar_url",
 			PathCover:      "",
 		},
 		Live: AuthRegistration{
@@ -42,10 +44,11 @@ var (
 			Scopes:         []string{"wl.signin"},
 			AuthURL:        "https://login.live.com/oauth20_authorize.srf",
 			AccessTokenURL: "https://login.live.com/oauth20_token.srf",
-			UserinfoURL:    "https://apis.live.net/v5.0/me",
-			PathID:         "id",
-			PathEMail:      "emails.account",
-			PathName:       "name",
+			UserinfoBase:   "https://apis.live.net",
+			UserinfoURLs:   []string{"/v5.0/me"},
+			PathID:         "url[0].id",
+			PathEMail:      "url[0].emails.account",
+			PathName:       "url[0].name",
 			PathPicture:    "",
 			PathCover:      "",
 		},
@@ -54,12 +57,12 @@ var (
 			Scopes:         []string{"r_basicprofile", "r_emailaddress"},
 			AuthURL:        "https://www.linkedin.com/uas/oauth2/authorization",
 			AccessTokenURL: "https://www.linkedin.com/uas/oauth2/accessToken",
-			UserinfoOpaque: "/v1/people/~:(picture-url,first-name,last-name,id,formatted-name,email-address)?format=json",
-			UserinfoURL:    "https://api.linkedin.com",
-			PathID:         "id",
-			PathEMail:      "emailAddress",
-			PathName:       "formattedName",
-			PathPicture:    "pictureUrl",
+			UserinfoURLs:   []string{"/v1/people/~:(picture-url,first-name,last-name,id,formatted-name,email-address)?format=json"},
+			UserinfoBase:   "https://api.linkedin.com",
+			PathID:         "url[0].id",
+			PathEMail:      "url[0].emailAddress",
+			PathName:       "url[0].formattedName",
+			PathPicture:    "url[0].pictureUrl",
 			PathCover:      "",
 		},
 	}
@@ -97,8 +100,8 @@ func FillDefaults(backend string, reg AuthRegistration) AuthRegistration {
 	if reg.AccessTokenURL == "" {
 		reg.AccessTokenURL = def.AccessTokenURL
 	}
-	if reg.UserinfoURL == "" {
-		reg.UserinfoURL = def.UserinfoURL
+	if len(reg.UserinfoURLs) == 0 {
+		reg.UserinfoURLs = def.UserinfoURLs
 	}
 	if reg.PathID == "" {
 		reg.PathID = def.PathID
