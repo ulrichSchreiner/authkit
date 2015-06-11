@@ -1,4 +1,4 @@
-// authkit is a small library to provide a 3-legged oauth explicit flow
+// Package authkit is a small library to provide a 3-legged oauth explicit flow
 // for stateless rest services. You need a webapp for the user which communicates
 // with a server backend. This backend uses authkit to talk to the oauth
 // providers and generates a JWT token. All of the rest services can use
