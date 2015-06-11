@@ -78,6 +78,8 @@ func normal(w http.ResponseWriter, rq *http.Request) {
 		log.Printf("no valid auth context found: %s", err)
 	} else {
 		log.Printf("current authenticated user: %#v", ctx.User)
+		newt, err := ctx.Expire(time.Now().Add(1 * time.Hour))
+		log.Printf("new token: %s\nerr:%s", newt, err)
 	}
 }
 

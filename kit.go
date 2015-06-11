@@ -127,6 +127,13 @@ type Authkit struct {
 type AuthContext struct {
 	User   AuthUser
 	Claims Values
+	kit    *Authkit
+}
+
+// Expire generates a new token with the given time as the new expiration
+// time. It is up to the caller to transport this new token to the client.
+func (ac *AuthContext) Expire(t time.Time) (string, error) {
+	return ac.kit.expire(ac.User, ac.Claims, t)
 }
 
 // An AuthHandler is a callback function with the current authenticated
@@ -221,7 +228,7 @@ func (kit *Authkit) Context(rq *http.Request) (*AuthContext, error) {
 	for k, v := range tok.Claims {
 		vals[k] = fmt.Sprintf("%v", v)
 	}
-	ac := &AuthContext{u, vals}
+	ac := &AuthContext{u, vals, kit}
 	return ac, nil
 }
 
@@ -231,6 +238,7 @@ func (kit *Authkit) Handle(h AuthHandler) http.HandlerFunc {
 		ac, err := kit.Context(rq)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
 		}
 		h(ac, w, rq)
 	}
@@ -282,6 +290,24 @@ func (kit *Authkit) redirect(w http.ResponseWriter, rq *http.Request) {
 		return
 	}
 	kit.template("text/html", redirectTemplate, w, rq)
+}
+
+func (kit *Authkit) expire(u AuthUser, claims Values, t time.Time) (string, error) {
+	tk := jwt.New(jwt.GetSigningMethod(signMethod))
+	usrBytes, err := json.Marshal(u)
+	if err != nil {
+		return "", fmt.Errorf("cannot marshal user as json: %s", err)
+	}
+	for k, v := range claims {
+		tk.Claims[k] = v
+	}
+	tk.Claims["user"] = string(usrBytes)
+	tk.Claims["exp"] = t.Unix()
+	signed, err := tk.SignedString(kit.key)
+	if err != nil {
+		return "", err
+	}
+	return signed, nil
 }
 
 func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
