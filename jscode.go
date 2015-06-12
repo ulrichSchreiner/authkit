@@ -34,11 +34,12 @@ var authkit = {
   provider : function (p) {
     return __authkit__state__.providers[p];
   },
-  login : function (provider) {
+  login : function (provider,base) {
     var p = authkit.provider(provider);
     if (!p) return;
+    if (!base) base = window.location.origin;
     var scopes = encodeURIComponent(p.scopes);
-    var redir = encodeURIComponent(window.location.origin+p.redirect);
+    var redir = encodeURIComponent(base+p.redirect);
     var state = encodeURIComponent(JSON.stringify({network:p.network,redirect_uri:redir,cbid:__authkit__state__.authCallback}));
     var authU = p.authurl+"?redirect_uri="+redir+"&response_type=code&client_id="+p.client_id+"&state="+state;
     if (p.scopes) {
