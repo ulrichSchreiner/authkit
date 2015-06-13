@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -166,6 +167,19 @@ func Must(url string) *Authkit {
 		panic(e)
 	}
 	return k
+}
+
+// WithKeyfile loads the given private key and stores it in the
+// Authkit. If the file cannot be loaded this function panics. If you need
+// more control call 'UseKey' instead.
+func (kit *Authkit) WithKeyfile(kf string) *Authkit {
+	key, e := os.Open(kf)
+	if e != nil {
+		panic(fmt.Errorf("cannot load keyfile: %s, origin:%s", kf, e))
+	}
+	defer key.Close()
+	kit.UseKey(key)
+	return kit
 }
 
 // Add will add the given registration to the map of providers. If there
