@@ -44,7 +44,7 @@ var (
 		},
 		Live: AuthRegistration{
 			Network:        Live,
-			Scopes:         []string{"wl.signin"},
+			Scopes:         []string{"wl.signin", "wl.basic"},
 			AuthURL:        "https://login.live.com/oauth20_authorize.srf",
 			AccessTokenURL: "https://login.live.com/oauth20_token.srf",
 			UserinfoBase:   "https://apis.live.net",
