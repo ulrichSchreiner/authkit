@@ -100,9 +100,13 @@ var redirect = `
         }
         else if(req.status == 400) {
             console.log('There was an error processing the access code:',req.responseText)
+            window.opener[cbid](null, null, req);
+            window.close();
         }
         else {
           console.log('something other than 200 was returned:',req.responseText)
+          window.opener[cbid](null, null, req);
+          window.close();
         }
       }
     };
