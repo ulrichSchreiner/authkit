@@ -6,7 +6,7 @@ const (
 	// Github constant.
 	Github Provider = "github"
 	// Live constant
-	Live Provider = "windows"
+	Live Provider = "live"
 	// LinkedIn constant
 	LinkedIn Provider = "linkedin"
 )
