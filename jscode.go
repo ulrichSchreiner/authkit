@@ -47,16 +47,13 @@ var authkit = {
     }
     var self = this;
     self.user = function (cb) { this.authCB = cb; };
-    window[__authkit__state__.authCallback] = function (token, usr) {
-      console.log(usr);
-      self.authCB(usr, token)
-    }
-    popup(authU, 500, 600);
+		self.cbid = __authkit__state__.authCallback;
+    popup(authU, 500, 600, this);
     return self;
   }
 };
 
-function popup (u, w, h) {
+function popup (u, w, h, target) {
   var documentElement = document.documentElement;
 
 	// Multi Screen Popup Positioning (http://stackoverflow.com/a/16861050)
@@ -71,7 +68,27 @@ function popup (u, w, h) {
 	var left = ((width - w) / 2) + dualScreenLeft;
 	var top  = ((height - h) / 2) + dualScreenTop;
 	var feat = "resizeable=true,height=" + h + ",width=" + w + ",left=" + left + ",top="  + top
-	window.open(u, "_blank", feat);
+	win = window.open(u, "_blank", feat);
+	// use polling because of an ugly IOS/chrome bug where window.opener is null
+	poll = setInterval(function() {
+      if (win && win.closed) {
+          clearInterval(poll);
+          returnOauth(target);
+      }
+  } , 300);
+}
+
+function returnOauth (target) {
+	var cbid = target.cbid;
+	var token = localStorage.getItem(cbid+"-token");
+	var usr = JSON.parse(localStorage.getItem(cbid+"-user"));
+
+	localStorage.removeItem(cbid+"-token");
+	localStorage.removeItem(cbid+"-user");
+
+	if (target.authCB) {
+		target.authCB(usr, token);
+	}
 }
 `
 var redirectTemplate = template.Must(template.New("redirect").Funcs(funcMap).Parse(redirect))
@@ -85,32 +102,26 @@ var redirect = `
     while (m = regex.exec(queryString)) {
       params[decodeURIComponent(m[1])] = decodeURIComponent(m[2]);
     }
-    
+
     var req = new XMLHttpRequest();
     var cbid = JSON.parse(params.state).cbid;
     req.open('GET', '{{ .Base }}auth?code='+params.code+"&state="+params.state, true);
-    
+
     req.onreadystatechange = function (e) {
       if (req.readyState == 4) {
         if(req.status == 200){
            var tok = req.getResponseHeader("Authorization");
-           var usr = JSON.parse(req.responseText);
-           console.log("window:", window);
-           console.log("opener:", window.opener);
-           console.log("cbid:", cbid);
-           console.log("direct: ", window[cbid]);
-           console.log("cb: ", window.opener[cbid]);
-           window.opener[cbid](tok, usr);
+           var usr = req.responseText;
+					 localStorage.setItem(cbid+"-token", tok);
+					 localStorage.setItem(cbid+"-user", usr);
            window.close();
         }
         else if(req.status == 400) {
             console.log('There was an error processing the access code:',req.responseText)
-            window.opener[cbid](null, null, req);
             window.close();
         }
         else {
           console.log('something other than 200 was returned:',req.responseText)
-          window.opener[cbid](null, null, req);
           window.close();
         }
       }
