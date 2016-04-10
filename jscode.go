@@ -95,6 +95,10 @@ var redirect = `
         if(req.status == 200){
            var tok = req.getResponseHeader("Authorization");
            var usr = JSON.parse(req.responseText);
+           console.log("window:", window);
+           console.log("opener:", window.opener);
+           console.log("cbid:", cbid);
+           console.log("cb: ", window.opener[cbid]);
            window.opener[cbid](tok, usr);
            window.close();
         }
