@@ -82,12 +82,20 @@ function returnOauth (target) {
 	var cbid = target.cbid;
 	var token = localStorage.getItem(cbid+"-token");
 	var usr = JSON.parse(localStorage.getItem(cbid+"-user"));
+	var err = localStorage.getItem(cbid+"-error");
 
 	localStorage.removeItem(cbid+"-token");
 	localStorage.removeItem(cbid+"-user");
+	localStorage.removeItem(cbid+"-error");
 
-	if (target.authCB) {
-		target.authCB(usr, token);
+	if (token && usr) {
+		if (target.authCB) {
+			target.authCB(usr, token);
+		}
+	} else if (err) {
+		if (target.authCB) {
+			target.authCB(null, null, err);
+		}
 	}
 }
 `
@@ -106,6 +114,7 @@ var redirect = `
     var req = new XMLHttpRequest();
     var cbid = JSON.parse(params.state).cbid;
     req.open('GET', '{{ .Base }}auth?code='+params.code+"&state="+params.state, true);
+		console.log("code: ", params.code, "state: ", params.state);
 
     req.onreadystatechange = function (e) {
       if (req.readyState == 4) {
@@ -118,10 +127,12 @@ var redirect = `
         }
         else if(req.status == 400) {
             console.log('There was an error processing the access code:',req.responseText)
+						localStorage.setItem(cbid+"-error", req.responseText);
             window.close();
         }
         else {
           console.log('something other than 200 was returned:',req.responseText)
+					localStorage.setItem(cbid+"-error", req.responseText);
           window.close();
         }
       }
