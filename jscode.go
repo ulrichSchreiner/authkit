@@ -98,6 +98,7 @@ var redirect = `
            console.log("window:", window);
            console.log("opener:", window.opener);
            console.log("cbid:", cbid);
+           console.log("direct: ", window[cbid]);
            console.log("cb: ", window.opener[cbid]);
            window.opener[cbid](tok, usr);
            window.close();
