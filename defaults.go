@@ -1,14 +1,12 @@
 package authkit
 
+// some constants
 const (
-	// Google constant.
-	Google Provider = "google"
-	// Github constant.
-	Github Provider = "github"
-	// Live constant
-	Live Provider = "live"
-	// LinkedIn constant
-	LinkedIn Provider = "linkedin"
+	Facebook Provider = "facebook"
+	Google            = "google"
+	Github            = "github"
+	Live              = "live"
+	LinkedIn          = "linkedin"
 )
 
 // A ProviderRegistry contains all registerd providers.
@@ -16,6 +14,19 @@ type ProviderRegistry map[Provider]AuthRegistration
 
 var (
 	defaultBackends = ProviderRegistry{
+		Facebook: AuthRegistration{
+			Network:        Facebook,
+			Scopes:         []string{"public_profile", "email"},
+			AuthURL:        "https://www.facebook.com/dialog/oauth/",
+			AccessTokenURL: "https://graph.facebook.com/oauth/access_token",
+			UserinfoBase:   "https://graph.facebook.com/v2.6",
+			UserinfoURLs:   []string{"/me?fields=email,name,timezone,about,age_range,birthday,cover,gender,locale,picture"},
+			PathID:         "url[0].id",
+			PathEMail:      "url[0].email",
+			PathName:       "url[0].name",
+			PathPicture:    "url[0].picture.data.url",
+			PathCover:      "",
+		},
 		Google: AuthRegistration{
 			Network:        Google,
 			Scopes:         []string{"openid", "profile", "email", "https://www.googleapis.com/auth/plus.me"},
