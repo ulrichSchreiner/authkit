@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/dgrijalva/jwt-go/request"
 
 	"golang.org/x/oauth2"
 )
@@ -42,6 +43,7 @@ type AuthRegistration struct {
 	ClientSecret   string   `json:"clientsecret"`
 	Scopes         []string `json:"scopes"`
 	AuthURL        string   `json:"authurl"`
+	AccessType     string   `json:"access_type"`
 	AccessTokenURL string   `json:"accesstokenurl"`
 	UserinfoURLs   []string `json:"userinfo_urls"`
 	UserinfoBase   string   `json:"userinfo_base"`
@@ -224,7 +226,7 @@ func (kit *Authkit) UseKey(r io.Reader) error {
 
 // Context returns the current authentication context from the given request.
 func (kit *Authkit) Context(rq *http.Request) (*AuthContext, error) {
-	tok, err := jwt.ParseFromRequest(rq, func(token *jwt.Token) (interface{}, error) {
+	tok, err := request.ParseFromRequest(rq, request.AuthorizationHeaderExtractor, func(token *jwt.Token) (interface{}, error) {
 		return kit.key.Public(), nil
 	})
 	if err != nil {
@@ -233,13 +235,14 @@ func (kit *Authkit) Context(rq *http.Request) (*AuthContext, error) {
 	if !tok.Valid {
 		return nil, fmt.Errorf("invalid token")
 	}
-	usrBytes := tok.Claims["user"].(string)
+	claims := tok.Claims.(jwt.MapClaims)
+	usrBytes := claims["user"].(string)
 	var u AuthUser
 	if err := json.Unmarshal([]byte(usrBytes), &u); err != nil {
 		return nil, fmt.Errorf("cannot unmarshal user: %s", err)
 	}
 	vals := make(Values)
-	for k, v := range tok.Claims {
+	for k, v := range claims {
 		vals[k] = fmt.Sprintf("%v", v)
 	}
 	ac := &AuthContext{u, vals, kit}
@@ -312,11 +315,12 @@ func (kit *Authkit) expire(u AuthUser, claims Values, t time.Time) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("cannot marshal user as json: %s", err)
 	}
+	tkclaims := tk.Claims.(jwt.MapClaims)
 	for k, v := range claims {
-		tk.Claims[k] = v
+		tkclaims[k] = v
 	}
-	tk.Claims["user"] = string(usrBytes)
-	tk.Claims["exp"] = t.Unix()
+	tkclaims["user"] = string(usrBytes)
+	tkclaims["exp"] = t.Unix()
 	signed, err := tk.SignedString(kit.key)
 	if err != nil {
 		return "", err
@@ -362,13 +366,14 @@ func (kit *Authkit) auth(w http.ResponseWriter, rq *http.Request) {
 		http.Error(w, fmt.Sprintf("cannot marshal user as json: %s", err), http.StatusInternalServerError)
 		return
 	}
+	tkclaims := t.Claims.(jwt.MapClaims)
 	if vls != nil {
 		for k, v := range vls {
-			t.Claims[k] = v
+			tkclaims[k] = v
 		}
 	}
-	t.Claims["user"] = string(usrBytes)
-	t.Claims["exp"] = time.Now().Add(dur).Unix()
+	tkclaims["user"] = string(usrBytes)
+	tkclaims["exp"] = time.Now().Add(dur).Unix()
 	signed, err := t.SignedString(kit.key)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

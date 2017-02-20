@@ -23,6 +23,7 @@ __authkit__state__.providers["{{ $value.Network }}"] = {
   authurl : "{{ $value.AuthURL }}",
   client_id : "{{ $value.ClientID }}",
   scopes : "{{ join $value.Scopes " " }}",
+  accesstype: "{{ $value.AccessType }}",
   redirect: "{{ $base }}redirect"
 };
 {{ end }}
@@ -44,6 +45,9 @@ var authkit = {
     var authU = p.authurl+"?redirect_uri="+redir+"&response_type=code&client_id="+p.client_id+"&state="+state;
     if (p.scopes) {
       authU = authU + "&scope="+scopes;
+    }
+    if (p.accesstype) {
+      authU = authU + "&access_type="+p.accesstype;
     }
     var self = this;
     self.user = function (cb) { this.authCB = cb; };
