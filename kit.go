@@ -433,7 +433,7 @@ func oauth(reg AuthRegistration, accesscode, redirectURL string) (*AuthUser, *To
 	userdata["url"] = res
 	var authuser AuthUser
 	authuser.Network = reg.Network
-	authuser.Fields = userdata
+	//authuser.Fields = userdata
 	v, err := getValue(reg.PathID, userdata)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot get id: %s", err)
