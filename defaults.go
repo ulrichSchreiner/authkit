@@ -21,7 +21,7 @@ var (
 			AccessTokenURL: "https://graph.facebook.com/oauth/access_token",
 			AccessType:     "offline",
 			UserinfoBase:   "https://graph.facebook.com/v3.0",
-			UserinfoURLs:   []string{"/me?fields=email,name,gender,locale,picture"},
+			UserinfoURLs:   []string{"/me?fields=email,name,picture"},
 			PathID:         "url[0].id",
 			PathEMail:      "url[0].email",
 			PathName:       "url[0].name",
